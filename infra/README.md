@@ -21,7 +21,7 @@ This Bicep infrastructure deploys an Azure Container Apps (ACA) application with
 | Azure AI Search | ✅ | Basic SKU |
 | Azure OpenAI | ✅ | Cognitive Services OpenAI User role for MI |
 | Document Intelligence | ✅ | Cognitive Services User role for MI |
-| Azure Bastion | — | Basic SKU; provides secure RDP access to jumpbox |
+| Azure Bastion | — | Developer SKU; no dedicated subnet or public IP required |
 | Windows 11 VM (Jumpbox) | — | Standard_B2s; accessed via Bastion |
 
 All services have **public network access disabled** except ACA (which is VNet-internal). Seven private DNS zones are created and linked to the VNet.
@@ -30,10 +30,9 @@ All services have **public network access disabled** except ACA (which is VNet-i
 
 ```
 VNet: 10.0.0.0/22
-├── snet-aca:          10.0.0.0/25    (128 IPs — ACA Environment, delegated to Microsoft.App/environments)
-├── snet-pe:           10.0.0.128/25  (128 IPs — Private Endpoints)
-├── AzureBastionSubnet: 10.0.1.0/26   (64 IPs  — Azure Bastion, required name)
-└── snet-jumpbox:      10.0.1.64/28   (16 IPs  — Jumpbox VM)
+├── snet-aca:     10.0.0.0/25    (128 IPs — ACA Environment, delegated to Microsoft.App/environments)
+├── snet-pe:      10.0.0.128/25  (128 IPs — Private Endpoints)
+└── snet-jumpbox: 10.0.1.0/28    (16 IPs  — Jumpbox VM)
 ```
 
 > **Note:** ACA with Workload Profiles (Consumption) supports subnets as small as /27. The default /25 provides ample room. The old /23 minimum only applies to legacy Consumption-only environments.
@@ -59,8 +58,7 @@ VNet: 10.0.0.0/22
 | `vnetAddressPrefix` | when `createVnet=true` | `10.0.0.0/22` | VNet CIDR |
 | `acaSubnetAddressPrefix` | | `10.0.0.0/25` | ACA subnet CIDR (min /27) |
 | `privateEndpointSubnetAddressPrefix` | | `10.0.0.128/25` | PE subnet CIDR |
-| `bastionSubnetAddressPrefix` | | `10.0.1.0/26` | Bastion subnet CIDR (min /26) |
-| `jumpboxSubnetAddressPrefix` | | `10.0.1.64/28` | Jumpbox VM subnet CIDR |
+| `jumpboxSubnetAddressPrefix` | | `10.0.1.0/28` | Jumpbox VM subnet CIDR |
 | `sqlDatabaseName` | | `appdb` | SQL database name |
 | `sqlEntraAdminObjectId` | ✅ | — | Entra admin Object ID |
 | `sqlEntraAdminLogin` | ✅ | — | Entra admin UPN |

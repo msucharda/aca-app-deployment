@@ -24,11 +24,8 @@ param acaSubnetAddressPrefix string = '10.0.0.0/25'
 @description('Address prefix for the private endpoint subnet (e.g., 10.0.0.128/25)')
 param privateEndpointSubnetAddressPrefix string = '10.0.0.128/25'
 
-@description('Address prefix for the Azure Bastion subnet (minimum /26)')
-param bastionSubnetAddressPrefix string = '10.0.1.0/26'
-
 @description('Address prefix for the jumpbox VM subnet')
-param jumpboxSubnetAddressPrefix string = '10.0.1.64/28'
+param jumpboxSubnetAddressPrefix string = '10.0.1.0/28'
 
 @description('Name of the SQL database')
 param sqlDatabaseName string = 'appdb'
@@ -93,7 +90,6 @@ module networkingNew 'modules/networking.bicep' = if (createVnet) {
     tags: allTags
     acaSubnetAddressPrefix: acaSubnetAddressPrefix
     privateEndpointSubnetAddressPrefix: privateEndpointSubnetAddressPrefix
-    bastionSubnetAddressPrefix: bastionSubnetAddressPrefix
     jumpboxSubnetAddressPrefix: jumpboxSubnetAddressPrefix
   }
 }
@@ -106,7 +102,6 @@ module networkingExisting 'modules/networking.bicep' = if (!createVnet) {
     createVnet: false
     acaSubnetAddressPrefix: acaSubnetAddressPrefix
     privateEndpointSubnetAddressPrefix: privateEndpointSubnetAddressPrefix
-    bastionSubnetAddressPrefix: bastionSubnetAddressPrefix
     jumpboxSubnetAddressPrefix: jumpboxSubnetAddressPrefix
   }
 }
@@ -114,7 +109,7 @@ module networkingExisting 'modules/networking.bicep' = if (!createVnet) {
 var peSubnetId = createVnet ? networkingNew.outputs.peSubnetId : networkingExisting.outputs.peSubnetId
 var acaSubnetId = createVnet ? networkingNew.outputs.acaSubnetId : networkingExisting.outputs.acaSubnetId
 var dnsZoneIds = createVnet ? networkingNew.outputs.dnsZoneIds : networkingExisting.outputs.dnsZoneIds
-var bastionSubnetId = createVnet ? networkingNew.outputs.bastionSubnetId : networkingExisting.outputs.bastionSubnetId
+var vnetId = createVnet ? networkingNew.outputs.vnetId : networkingExisting.outputs.vnetId
 var jumpboxSubnetId = createVnet ? networkingNew.outputs.jumpboxSubnetId : networkingExisting.outputs.jumpboxSubnetId
 
 // --- User-Assigned Managed Identity ---
@@ -266,7 +261,7 @@ module jumpbox 'modules/jumpbox.bicep' = {
     location: location
     tags: allTags
     vmSubnetId: jumpboxSubnetId
-    bastionSubnetId: bastionSubnetId
+    vnetId: vnetId
     adminUsername: jumpboxAdminUsername
     adminPassword: jumpboxAdminPassword
   }

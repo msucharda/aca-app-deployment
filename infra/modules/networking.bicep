@@ -21,9 +21,6 @@ param acaSubnetAddressPrefix string
 @description('Address prefix for the private endpoint subnet')
 param privateEndpointSubnetAddressPrefix string
 
-@description('Address prefix for the Azure Bastion subnet')
-param bastionSubnetAddressPrefix string = ''
-
 @description('Address prefix for the jumpbox VM subnet')
 param jumpboxSubnetAddressPrefix string = ''
 
@@ -72,17 +69,9 @@ resource peSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
   }
 }
 
-resource bastionSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = if (!empty(bastionSubnetAddressPrefix)) {
-  name: '${vnetName}/AzureBastionSubnet'
-  dependsOn: [peSubnet]
-  properties: {
-    addressPrefix: bastionSubnetAddressPrefix
-  }
-}
-
 resource jumpboxSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = if (!empty(jumpboxSubnetAddressPrefix)) {
   name: '${vnetName}/snet-jumpbox'
-  dependsOn: [bastionSubnet]
+  dependsOn: [peSubnet]
   properties: {
     addressPrefix: jumpboxSubnetAddressPrefix
   }
@@ -125,7 +114,6 @@ output acaSubnetId string = acaSubnet.id
 output peSubnetId string = peSubnet.id
 output vnetId string = vnetId
 
-output bastionSubnetId string = !empty(bastionSubnetAddressPrefix) ? bastionSubnet.id : ''
 output jumpboxSubnetId string = !empty(jumpboxSubnetAddressPrefix) ? jumpboxSubnet.id : ''
 
 output dnsZoneIds object = {

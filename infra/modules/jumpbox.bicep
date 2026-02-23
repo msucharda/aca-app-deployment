@@ -12,8 +12,8 @@ param tags object = {}
 @description('Subnet ID for the jumpbox VM')
 param vmSubnetId string
 
-@description('Subnet ID for Azure Bastion (must be named AzureBastionSubnet)')
-param bastionSubnetId string
+@description('VNet ID for Azure Bastion Developer SKU')
+param vnetId string
 
 @description('VM admin username')
 param adminUsername string
@@ -25,39 +25,17 @@ param adminPassword string
 @description('VM size')
 param vmSize string = 'Standard_B2s'
 
-resource publicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
-  name: 'pip-bastion-${name}'
-  location: location
-  tags: tags
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    publicIPAllocationMethod: 'Static'
-  }
-}
-
 resource bastionHost 'Microsoft.Network/bastionHosts@2024-05-01' = {
   name: 'bas-${name}'
   location: location
   tags: tags
   sku: {
-    name: 'Basic'
+    name: 'Developer'
   }
   properties: {
-    ipConfigurations: [
-      {
-        name: 'bastion-ipconfig'
-        properties: {
-          publicIPAddress: {
-            id: publicIp.id
-          }
-          subnet: {
-            id: bastionSubnetId
-          }
-        }
-      }
-    ]
+    virtualNetwork: {
+      id: vnetId
+    }
   }
 }
 
