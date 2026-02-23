@@ -37,6 +37,13 @@ param sqlAdminLogin string
 @description('SQL Server administrator password')
 param sqlAdminPassword string
 
+@description('SQL service account login name (non-admin, for application use)')
+param sqlServiceLogin string
+
+@secure()
+@description('SQL service account password (non-admin, for application use)')
+param sqlServicePassword string
+
 var resourceSuffix = take(uniqueString(subscription().id, resourceGroup().name, name), 6)
 
 resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
@@ -101,3 +108,4 @@ output id string = sqlServer.id
 output name string = sqlServer.name
 output fqdn string = sqlServer.properties.fullyQualifiedDomainName
 output databaseName string = sqlDatabase.name
+output serviceLogin string = sqlServiceLogin

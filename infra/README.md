@@ -62,8 +62,10 @@ VNet: 10.0.0.0/22
 | `sqlDatabaseName` | | `appdb` | SQL database name |
 | `sqlEntraAdminObjectId` | ✅ | — | Entra admin Object ID |
 | `sqlEntraAdminLogin` | ✅ | — | Entra admin UPN |
-| `sqlAdminLogin` | ✅ | — | SQL Server admin login |
+| `sqlAdminLogin` | ✅ | — | SQL Server admin login (server management only) |
 | `sqlAdminPassword` | ✅ | — | SQL Server admin password (secure) |
+| `sqlServiceLogin` | ✅ | — | SQL service account login (for application use) |
+| `sqlServicePassword` | ✅ | — | SQL service account password (secure) |
 | `jumpboxAdminUsername` | | `azureadmin` | Jumpbox VM admin username |
 | `jumpboxAdminPassword` | ✅ | — | Jumpbox VM admin password (secure) |
 | `tags` | | `{}` | Resource tags |
@@ -88,6 +90,8 @@ az deployment sub create \
     sqlEntraAdminLogin=<your-upn> \
     sqlAdminLogin=<sql-admin-login> \
     sqlAdminPassword=<sql-admin-password> \
+    sqlServiceLogin=<sql-service-login> \
+    sqlServicePassword=<sql-service-password> \
     jumpboxAdminPassword=<jumpbox-password>
 ```
 
@@ -110,6 +114,8 @@ az deployment sub create \
     sqlEntraAdminLogin=<your-upn> \
     sqlAdminLogin=<sql-admin-login> \
     sqlAdminPassword=<sql-admin-password> \
+    sqlServiceLogin=<sql-service-login> \
+    sqlServicePassword=<sql-service-password> \
     jumpboxAdminPassword=<jumpbox-password>
 ```
 
@@ -127,6 +133,8 @@ azd env set AZURE_SQL_ENTRA_ADMIN_OBJECT_ID <your-object-id>
 azd env set AZURE_SQL_ENTRA_ADMIN_LOGIN <your-upn>
 azd env set AZURE_SQL_ADMIN_LOGIN <sql-admin-login>
 azd env set AZURE_SQL_ADMIN_PASSWORD <sql-admin-password>
+azd env set AZURE_SQL_SERVICE_LOGIN <sql-service-login>
+azd env set AZURE_SQL_SERVICE_PASSWORD <sql-service-password>
 azd env set AZURE_JUMPBOX_ADMIN_PASSWORD <jumpbox-password>
 azd provision
 ```
@@ -152,6 +160,7 @@ After deployment, these values are available:
 | `ACA_ENV_NAME` | ACA environment name |
 | `SQL_SERVER_FQDN` | SQL Server FQDN |
 | `SQL_DATABASE_NAME` | SQL database name |
+| `SQL_SERVICE_LOGIN` | SQL service account login (for application use) |
 | `OPENAI_ENDPOINT` | Azure OpenAI endpoint URL |
 | `DOC_INTELLIGENCE_ENDPOINT` | Document Intelligence endpoint URL |
 | `MANAGED_IDENTITY_CLIENT_ID` | User-Assigned MI client ID |
@@ -162,11 +171,29 @@ After deployment, these values are available:
 az deployment sub show --name my-deployment --query properties.outputs -o json
 ```
 
+## Post-Deployment: Create SQL Service Account
+
+The SQL server admin credentials are for management only. After deployment, connect to the SQL server via the jumpbox (using Bastion) and run the following T-SQL to create the service account:
+
+```sql
+-- Connect to the master database as admin
+CREATE LOGIN [<sqlServiceLogin>] WITH PASSWORD = '<sqlServicePassword>';
+
+-- Switch to the application database
+USE [appdb];
+CREATE USER [<sqlServiceLogin>] FOR LOGIN [<sqlServiceLogin>];
+ALTER ROLE db_datareader ADD MEMBER [<sqlServiceLogin>];
+ALTER ROLE db_datawriter ADD MEMBER [<sqlServiceLogin>];
+```
+
+> Replace `<sqlServiceLogin>` and `<sqlServicePassword>` with the values provided during deployment. Adjust roles as needed — `db_datareader` and `db_datawriter` are a reasonable default for application services.
+
 ## Security
 
 - All services except ACA use private endpoints with public network access disabled
 - ACA has public ingress enabled — accessible from the internet via its FQDN
-- SQL supports both Entra ID and password authentication; end users connect via managed identities
+- SQL supports both Entra ID and password authentication; end users connect via Entra (managed identities), services use a dedicated service account (never the server admin)
+- SQL admin credentials are for server management only — applications must use the service account
 - Jumpbox VM is accessible only via Azure Bastion (no public IP on the VM)
 - Storage Account has local auth disabled (`allowSharedKeyAccess: false`)
 - Key Vault uses RBAC authorization (no access policies)

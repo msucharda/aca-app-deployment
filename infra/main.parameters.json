@@ -41,6 +41,12 @@
     "sqlAdminPassword": {
       "value": "${AZURE_SQL_ADMIN_PASSWORD}"
     },
+    "sqlServiceLogin": {
+      "value": "${AZURE_SQL_SERVICE_LOGIN}"
+    },
+    "sqlServicePassword": {
+      "value": "${AZURE_SQL_SERVICE_PASSWORD}"
+    },
     "jumpboxAdminUsername": {
       "value": "${AZURE_JUMPBOX_ADMIN_USERNAME=azureadmin}"
     },

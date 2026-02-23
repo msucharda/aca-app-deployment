@@ -43,6 +43,13 @@ param sqlAdminLogin string
 @description('SQL Server administrator password')
 param sqlAdminPassword string
 
+@description('SQL service account login (non-admin, for application use)')
+param sqlServiceLogin string
+
+@secure()
+@description('SQL service account password (non-admin, for application use)')
+param sqlServicePassword string
+
 @description('Jumpbox VM admin username')
 param jumpboxAdminUsername string = 'azureadmin'
 
@@ -207,6 +214,8 @@ module sql 'modules/sql.bicep' = {
     entraAdminLogin: sqlEntraAdminLogin
     sqlAdminLogin: sqlAdminLogin
     sqlAdminPassword: sqlAdminPassword
+    sqlServiceLogin: sqlServiceLogin
+    sqlServicePassword: sqlServicePassword
   }
 }
 
@@ -272,6 +281,7 @@ output RESOURCE_GROUP_NAME string = rg.name
 output ACA_ENV_NAME string = acaEnv.outputs.name
 output SQL_SERVER_FQDN string = sql.outputs.fqdn
 output SQL_DATABASE_NAME string = sql.outputs.databaseName
+output SQL_SERVICE_LOGIN string = sql.outputs.serviceLogin
 output OPENAI_ENDPOINT string = openai.outputs.endpoint
 output DOC_INTELLIGENCE_ENDPOINT string = docIntelligence.outputs.endpoint
 output MANAGED_IDENTITY_CLIENT_ID string = identity.outputs.clientId
