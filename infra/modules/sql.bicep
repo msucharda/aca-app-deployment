@@ -30,6 +30,13 @@ param entraAdminObjectId string
 @description('Entra admin login name')
 param entraAdminLogin string
 
+@description('SQL Server administrator login name')
+param sqlAdminLogin string
+
+@secure()
+@description('SQL Server administrator password')
+param sqlAdminPassword string
+
 var resourceSuffix = take(uniqueString(subscription().id, resourceGroup().name, name), 6)
 
 resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
@@ -39,9 +46,11 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
   properties: {
     minimalTlsVersion: '1.2'
     publicNetworkAccess: 'Disabled'
+    administratorLogin: sqlAdminLogin
+    administratorLoginPassword: sqlAdminPassword
     administrators: {
       administratorType: 'ActiveDirectory'
-      azureADOnlyAuthentication: true
+      azureADOnlyAuthentication: false
       login: entraAdminLogin
       sid: entraAdminObjectId
       principalType: 'Group'

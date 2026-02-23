@@ -17,19 +17,23 @@ This Bicep infrastructure deploys an Azure Container Apps (ACA) application with
 | Azure Container App | — | File share mount, MI, ACR registry |
 | Storage Account + File Share | ✅ | Local auth disabled; mounted to ACA at `/mnt/fileshare` |
 | Key Vault | ✅ | RBAC mode; purge protection enabled |
-| Azure SQL Server + Database | ✅ | Entra-only auth (no SQL passwords) |
+| Azure SQL Server + Database | ✅ | Entra admin + SQL password auth; end users use managed identities |
 | Azure AI Search | ✅ | Basic SKU |
 | Azure OpenAI | ✅ | Cognitive Services OpenAI User role for MI |
 | Document Intelligence | ✅ | Cognitive Services User role for MI |
+| Azure Bastion | — | Basic SKU; provides secure RDP access to jumpbox |
+| Windows 11 VM (Jumpbox) | — | Standard_B2s; accessed via Bastion |
 
 All services have **public network access disabled** except ACA (which is VNet-internal). Seven private DNS zones are created and linked to the VNet.
 
-### Network Layout (default /24 VNet)
+### Network Layout (default /22 VNet)
 
 ```
-VNet: 10.0.0.0/24
-├── snet-aca: 10.0.0.0/25   (128 IPs — ACA Environment, delegated to Microsoft.App/environments)
-└── snet-pe:  10.0.0.128/25  (128 IPs — Private Endpoints)
+VNet: 10.0.0.0/22
+├── snet-aca:          10.0.0.0/25    (128 IPs — ACA Environment, delegated to Microsoft.App/environments)
+├── snet-pe:           10.0.0.128/25  (128 IPs — Private Endpoints)
+├── AzureBastionSubnet: 10.0.1.0/26   (64 IPs  — Azure Bastion, required name)
+└── snet-jumpbox:      10.0.1.64/28   (16 IPs  — Jumpbox VM)
 ```
 
 > **Note:** ACA with Workload Profiles (Consumption) supports subnets as small as /27. The default /25 provides ample room. The old /23 minimum only applies to legacy Consumption-only environments.
@@ -40,6 +44,8 @@ VNet: 10.0.0.0/24
 2. **Azure subscription** with Contributor + User Access Administrator roles
 3. **Existing VNet** (or set `createVnet=true` to have Bicep create one)
 4. **SQL Entra admin** — the Object ID and UPN of the user/group to be SQL admin
+5. **SQL admin credentials** — login and password for SQL Server password authentication
+6. **Jumpbox admin credentials** — login and password for the Windows 11 jumpbox VM
 
 ## Parameters
 
@@ -50,12 +56,18 @@ VNet: 10.0.0.0/24
 | `createVnet` | | `false` | `true` to create a new VNet |
 | `vnetResourceGroupName` | when `createVnet=false` | — | Resource group of existing VNet |
 | `vnetName` | when `createVnet=false` | — | Name of existing VNet |
-| `vnetAddressPrefix` | when `createVnet=true` | `10.0.0.0/24` | VNet CIDR |
+| `vnetAddressPrefix` | when `createVnet=true` | `10.0.0.0/22` | VNet CIDR |
 | `acaSubnetAddressPrefix` | | `10.0.0.0/25` | ACA subnet CIDR (min /27) |
 | `privateEndpointSubnetAddressPrefix` | | `10.0.0.128/25` | PE subnet CIDR |
+| `bastionSubnetAddressPrefix` | | `10.0.1.0/26` | Bastion subnet CIDR (min /26) |
+| `jumpboxSubnetAddressPrefix` | | `10.0.1.64/28` | Jumpbox VM subnet CIDR |
 | `sqlDatabaseName` | | `appdb` | SQL database name |
 | `sqlEntraAdminObjectId` | ✅ | — | Entra admin Object ID |
 | `sqlEntraAdminLogin` | ✅ | — | Entra admin UPN |
+| `sqlAdminLogin` | ✅ | — | SQL Server admin login |
+| `sqlAdminPassword` | ✅ | — | SQL Server admin password (secure) |
+| `jumpboxAdminUsername` | | `azureadmin` | Jumpbox VM admin username |
+| `jumpboxAdminPassword` | ✅ | — | Jumpbox VM admin password (secure) |
 | `tags` | | `{}` | Resource tags |
 
 ## Deployment
@@ -71,11 +83,14 @@ az deployment sub create \
     environmentName=myapp \
     location=swedencentral \
     createVnet=true \
-    vnetAddressPrefix='10.0.0.0/24' \
+    vnetAddressPrefix='10.0.0.0/22' \
     acaSubnetAddressPrefix='10.0.0.0/25' \
     privateEndpointSubnetAddressPrefix='10.0.0.128/25' \
     sqlEntraAdminObjectId=<your-object-id> \
-    sqlEntraAdminLogin=<your-upn>
+    sqlEntraAdminLogin=<your-upn> \
+    sqlAdminLogin=<sql-admin-login> \
+    sqlAdminPassword=<sql-admin-password> \
+    jumpboxAdminPassword=<jumpbox-password>
 ```
 
 ### Option 2: Use an existing VNet
@@ -94,7 +109,10 @@ az deployment sub create \
     acaSubnetAddressPrefix='10.0.0.0/25' \
     privateEndpointSubnetAddressPrefix='10.0.0.128/25' \
     sqlEntraAdminObjectId=<your-object-id> \
-    sqlEntraAdminLogin=<your-upn>
+    sqlEntraAdminLogin=<your-upn> \
+    sqlAdminLogin=<sql-admin-login> \
+    sqlAdminPassword=<sql-admin-password> \
+    jumpboxAdminPassword=<jumpbox-password>
 ```
 
 > When using an existing VNet, the subnets and private DNS zones are created inside the VNet's resource group.
@@ -109,6 +127,9 @@ azd env set AZURE_LOCATION swedencentral
 azd env set AZURE_CREATE_VNET true
 azd env set AZURE_SQL_ENTRA_ADMIN_OBJECT_ID <your-object-id>
 azd env set AZURE_SQL_ENTRA_ADMIN_LOGIN <your-upn>
+azd env set AZURE_SQL_ADMIN_LOGIN <sql-admin-login>
+azd env set AZURE_SQL_ADMIN_PASSWORD <sql-admin-password>
+azd env set AZURE_JUMPBOX_ADMIN_PASSWORD <jumpbox-password>
 azd provision
 ```
 
@@ -147,7 +168,8 @@ az deployment sub show --name my-deployment --query properties.outputs -o json
 
 - All services except ACA use private endpoints with public network access disabled
 - ACA has public ingress enabled — accessible from the internet via its FQDN
-- SQL uses Entra-only authentication (no passwords)
+- SQL supports both Entra ID and password authentication; end users connect via managed identities
+- Jumpbox VM is accessible only via Azure Bastion (no public IP on the VM)
 - Storage Account has local auth disabled (`allowSharedKeyAccess: false`)
 - Key Vault uses RBAC authorization (no access policies)
 - User-Assigned Managed Identity has least-privilege RBAC roles on each service
@@ -170,6 +192,7 @@ infra/
     ├── aca-env.bicep                   # ACA Environment (VNet-integrated)
     ├── aca-app.bicep                   # Container App (file share, MI)
     ├── sql.bicep                       # SQL Server + Database + PE
+    ├── jumpbox.bicep                   # Windows 11 VM + Azure Bastion Basic
     ├── ai-search.bicep                 # Azure AI Search + PE
     ├── openai.bicep                    # Azure OpenAI + PE
     ├── document-intelligence.bicep     # Document Intelligence + PE

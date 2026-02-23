@@ -16,13 +16,19 @@ param vnetResourceGroupName string = ''
 param vnetName string = ''
 
 @description('Address prefix for the VNet (only used when createVnet=true)')
-param vnetAddressPrefix string = '10.0.0.0/24'
+param vnetAddressPrefix string = '10.0.0.0/22'
 
 @description('Address prefix for the ACA subnet (minimum /27 with workload profiles)')
 param acaSubnetAddressPrefix string = '10.0.0.0/25'
 
 @description('Address prefix for the private endpoint subnet (e.g., 10.0.0.128/25)')
 param privateEndpointSubnetAddressPrefix string = '10.0.0.128/25'
+
+@description('Address prefix for the Azure Bastion subnet (minimum /26)')
+param bastionSubnetAddressPrefix string = '10.0.1.0/26'
+
+@description('Address prefix for the jumpbox VM subnet')
+param jumpboxSubnetAddressPrefix string = '10.0.1.64/28'
 
 @description('Name of the SQL database')
 param sqlDatabaseName string = 'appdb'
@@ -32,6 +38,20 @@ param sqlEntraAdminObjectId string
 
 @description('Entra admin login name for SQL Server')
 param sqlEntraAdminLogin string
+
+@description('SQL Server administrator login name')
+param sqlAdminLogin string
+
+@secure()
+@description('SQL Server administrator password')
+param sqlAdminPassword string
+
+@description('Jumpbox VM admin username')
+param jumpboxAdminUsername string = 'azureadmin'
+
+@secure()
+@description('Jumpbox VM admin password')
+param jumpboxAdminPassword string
 
 @description('Tags to apply to all resources')
 param tags object = {}
@@ -73,6 +93,8 @@ module networkingNew 'modules/networking.bicep' = if (createVnet) {
     tags: allTags
     acaSubnetAddressPrefix: acaSubnetAddressPrefix
     privateEndpointSubnetAddressPrefix: privateEndpointSubnetAddressPrefix
+    bastionSubnetAddressPrefix: bastionSubnetAddressPrefix
+    jumpboxSubnetAddressPrefix: jumpboxSubnetAddressPrefix
   }
 }
 
@@ -84,12 +106,16 @@ module networkingExisting 'modules/networking.bicep' = if (!createVnet) {
     createVnet: false
     acaSubnetAddressPrefix: acaSubnetAddressPrefix
     privateEndpointSubnetAddressPrefix: privateEndpointSubnetAddressPrefix
+    bastionSubnetAddressPrefix: bastionSubnetAddressPrefix
+    jumpboxSubnetAddressPrefix: jumpboxSubnetAddressPrefix
   }
 }
 
 var peSubnetId = createVnet ? networkingNew.outputs.peSubnetId : networkingExisting.outputs.peSubnetId
 var acaSubnetId = createVnet ? networkingNew.outputs.acaSubnetId : networkingExisting.outputs.acaSubnetId
 var dnsZoneIds = createVnet ? networkingNew.outputs.dnsZoneIds : networkingExisting.outputs.dnsZoneIds
+var bastionSubnetId = createVnet ? networkingNew.outputs.bastionSubnetId : networkingExisting.outputs.bastionSubnetId
+var jumpboxSubnetId = createVnet ? networkingNew.outputs.jumpboxSubnetId : networkingExisting.outputs.jumpboxSubnetId
 
 // --- User-Assigned Managed Identity ---
 module identity 'modules/identity.bicep' = {
@@ -184,6 +210,8 @@ module sql 'modules/sql.bicep' = {
     databaseName: sqlDatabaseName
     entraAdminObjectId: sqlEntraAdminObjectId
     entraAdminLogin: sqlEntraAdminLogin
+    sqlAdminLogin: sqlAdminLogin
+    sqlAdminPassword: sqlAdminPassword
   }
 }
 
@@ -226,6 +254,21 @@ module docIntelligence 'modules/document-intelligence.bicep' = {
     peSubnetId: peSubnetId
     privateDnsZoneId: dnsZoneIds.cognitiveServices
     managedIdentityPrincipalId: identity.outputs.principalId
+  }
+}
+
+// --- Jumpbox + Bastion ---
+module jumpbox 'modules/jumpbox.bicep' = {
+  name: 'jumpbox'
+  scope: rg
+  params: {
+    name: 'jb-${baseName}'
+    location: location
+    tags: allTags
+    vmSubnetId: jumpboxSubnetId
+    bastionSubnetId: bastionSubnetId
+    adminUsername: jumpboxAdminUsername
+    adminPassword: jumpboxAdminPassword
   }
 }
 
